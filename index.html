@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Kesihatan Awam HOAG - Tuberkulosis (TB)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PapaParse untuk membaca CSV Google Sheets -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- Font Awesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* bg-gray-100 */
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Navbar -->
+    <nav class="bg-blue-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fa-solid fa-lungs-virus text-2xl mr-3"></i>
+                    <span class="font-bold text-xl tracking-tight">HOAG <span class="font-light">| Sistem Pemantauan TB</span></span>
+                </div>
+                <div>
+                    <span class="text-sm bg-blue-700 px-3 py-1 rounded-full"><i class="fa-solid fa-clock mr-1"></i> Data Terkini: <span id="currentDate"></span></span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Header & Summary -->
+        <div class="mb-8">
+            <h1 class="text-2xl font-bold text-gray-900">Ringkasan Eksekutif Tuberkulosis (Tahun Semasa)</h1>
+            <p class="text-gray-600">Analisis taburan pesakit, demografi dan tren mengikut Minggu Epid (ME).</p>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Card 1: Jumlah Kes -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <i class="fa-solid fa-users text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm text-gray-500 font-medium">Jumlah Kes Terkumpul</p>
+                        <p class="text-2xl font-bold text-gray-900" id="kpiTotalCases">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Lelaki vs Perempuan -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-indigo-100 text-indigo-600">
+                        <i class="fa-solid fa-venus-mars text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm text-gray-500 font-medium">Nisbah Lelaki : Perempuan</p>
+                        <p class="text-2xl font-bold text-gray-900" id="kpiGenderRatio">0 : 0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Daerah Tertinggi -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-red-100 text-red-600">
+                        <i class="fa-solid fa-map-location-dot text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm text-gray-500 font-medium">Daerah Beban Tertinggi</p>
+                        <p class="text-xl font-bold text-gray-900" id="kpiTopDistrict">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: Purata Umur -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <i class="fa-solid fa-child-reaching text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm text-gray-500 font-medium">Purata Umur Pesakit</p>
+                        <p class="text-2xl font-bold text-gray-900" id="kpiAvgAge">0 Tahun</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Epid Week Trend (Span 2 cols) -->
+            <div class="bg-white p-6 rounded-xl shadow-sm lg:col-span-2">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Tren Kes Mengikut Minggu Epid (ME 1 - 52)</h3>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="epidWeekChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Gender Breakdown -->
+            <div class="bg-white p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Pecahan Jantina</h3>
+                <div class="chart-container flex justify-center items-center">
+                    <canvas id="genderChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- District Distribution -->
+            <div class="bg-white p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Taburan Kes Mengikut Daerah</h3>
+                <div class="chart-container">
+                    <canvas id="districtChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Age Groups -->
+            <div class="bg-white p-6 rounded-xl shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Kumpulan Umur (Tahun)</h3>
+                <div class="chart-container">
+                    <canvas id="ageChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-gray-800">Senarai Pendaftaran Pesakit Terkini (Sampel)</h3>
+                <button class="text-sm bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded transition" onclick="downloadCSV()">
+                    <i class="fa-solid fa-download mr-1"></i> Muat Turun CSV
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Daftar</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jantina</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Umur</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Daerah</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Minggu Epid</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200" id="patientTableBody">
+                        <!-- Data dimasukkan melalui JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <p class="text-center text-sm text-gray-500">&copy; <span id="year"></span> Sektor Kesihatan Awam HOAG. Data ditarik secara langsung dari pangkalan data <span class="font-semibold">Google Sheets</span> anda.</p>
+        </div>
+    </footer>
+
+    <!-- Logik JavaScript -->
+    <script>
+        // 1. Set Tarikh Semasa
+        document.getElementById('currentDate').innerText = new Date().toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('year').innerText = new Date().getFullYear();
+
+        // 2. URL Data Google Sheets (Format CSV) yang diberikan
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4w5sZZZjgYbzOLofQYTKtg_Cz67LWjY42krTHntxThgOYKQ3tpRfus82NMz1mlpmnqWFGYZ-Rrva/pub?gid=473580271&single=true&output=csv';
+
+        // Tunjukkan status pemuatan (Loading)
+        document.getElementById('kpiTotalCases').innerHTML = '<i class="fa-solid fa-spinner fa-spin text-sm"></i> Memuat...';
+
+        // 3. Fungsi untuk memetakan dan membersihkan data dari CSV
+        function processCSVData(rawData) {
+            return rawData.map((row, index) => {
+                // Cuba meneka nama lajur berdasarkan kata kunci (case-insensitive)
+                const keys = Object.keys(row);
+                
+                const jantinaKey = keys.find(k => k.toLowerCase().match(/(jantina|sex|gender)/));
+                const umurKey = keys.find(k => k.toLowerCase().match(/(umur|age)/));
+                const daerahKey = keys.find(k => k.toLowerCase().match(/(daerah|district|lokasi|mukim)/));
+                const meKey = keys.find(k => k.toLowerCase().match(/(minggu|epid|me|week)/));
+                const idKey = keys.find(k => k.toLowerCase().match(/(id|nama|no|pesakit)/));
+
+                // Normalisasi jantina (Lelaki/Perempuan)
+                let jantinaVal = jantinaKey ? row[jantinaKey].trim() : 'Tidak Dinyatakan';
+                if(jantinaVal.toLowerCase().startsWith('l') || jantinaVal.toLowerCase().startsWith('m')) jantinaVal = 'Lelaki';
+                else if(jantinaVal.toLowerCase().startsWith('p') || jantinaVal.toLowerCase().startsWith('f')) jantinaVal = 'Perempuan';
+
+                return {
+                    id: idKey && row[idKey] ? row[idKey] : `TB-${index+1}`,
+                    jantina: jantinaVal,
+                    umur: umurKey ? parseInt(row[umurKey]) || 0 : 0,
+                    daerah: daerahKey && row[daerahKey] ? row[daerahKey].trim() : 'Lain-lain',
+                    minggu_epid: meKey ? parseInt(row[meKey]) || 1 : 1
+                };
+            }).filter(d => !isNaN(d.umur) && d.umur > 0); // Tapis jika tiada umur / baris kosong
+        }
+
+        // 4. Tarik data dari Google Sheets & Inisialisasi Dashboard
+        Papa.parse(csvUrl, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                const tbData = processCSVData(results.data);
+                window.tbData = tbData; // Simpan untuk fungsi muat turun
+                renderDashboard(tbData);
+            },
+            error: function(err) {
+                console.error("Ralat memuat turun CSV:", err);
+                document.getElementById('kpiTotalCases').innerText = "Ralat Data";
+            }
+        });
+
+        // Simpan rujukan carta untuk elak pertindihan (jika data kemaskini semula)
+        let chartInstances = {};
+
+        function renderDashboard(tbData) {
+            // Jika data tiada/kosong
+            if(tbData.length === 0) {
+                document.getElementById('kpiTotalCases').innerText = "Tiada Data";
+                return;
+            }
+
+            // 5. Analisa Data
+            const totalCases = tbData.length;
+            const maleCount = tbData.filter(d => d.jantina === 'Lelaki').length;
+            const femaleCount = tbData.filter(d => d.jantina === 'Perempuan').length;
+            const totalAge = tbData.reduce((acc, curr) => acc + curr.umur, 0);
+            const avgAge = Math.round(totalAge / totalCases);
+
+            const districtCounts = {};
+            tbData.forEach(d => {
+                districtCounts[d.daerah] = (districtCounts[d.daerah] || 0) + 1;
+            });
+            const sortedDistricts = Object.keys(districtCounts).sort((a, b) => districtCounts[b] - districtCounts[a]);
+            const topDistrict = sortedDistricts.length > 0 ? sortedDistricts[0] : "-";
+
+            // 6. Kemaskini KPI Cards
+            document.getElementById('kpiTotalCases').innerText = totalCases.toLocaleString();
+            document.getElementById('kpiGenderRatio').innerText = `${maleCount} : ${femaleCount}`;
+            document.getElementById('kpiTopDistrict').innerText = topDistrict;
+            document.getElementById('kpiAvgAge').innerText = `${avgAge} Tahun`;
+
+            // 7. Penyediaan Carta (Chart.js)
+            Chart.defaults.font.family = "'Inter', sans-serif";
+            Chart.defaults.color = '#4b5563';
+
+            // --- Carta 1: Tren Minggu Epid ---
+            const meCounts = Array(52).fill(0);
+            tbData.forEach(d => { 
+                if(d.minggu_epid >= 1 && d.minggu_epid <= 52) {
+                    meCounts[d.minggu_epid - 1]++; 
+                }
+            });
+            
+            if(chartInstances.epid) chartInstances.epid.destroy();
+            chartInstances.epid = new Chart(document.getElementById('epidWeekChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 52}, (_, i) => `ME ${i+1}`),
+                    datasets: [{
+                        label: 'Bilangan Kes',
+                        data: meCounts,
+                        borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#2563eb', fill: true, tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // --- Carta 2: Pecahan Jantina ---
+            if(chartInstances.gender) chartInstances.gender.destroy();
+            chartInstances.gender = new Chart(document.getElementById('genderChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lelaki', 'Perempuan'],
+                    datasets: [{ data: [maleCount, femaleCount], backgroundColor: ['#3b82f6', '#ec4899'], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom' } } }
+            });
+
+            // --- Carta 3: Taburan Daerah ---
+            if(chartInstances.district) chartInstances.district.destroy();
+            chartInstances.district = new Chart(document.getElementById('districtChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sortedDistricts.slice(0, 10), // Hadkan 10 daerah tertinggi sahaja
+                    datasets: [{ label: 'Jumlah Kes', data: sortedDistricts.slice(0, 10).map(d => districtCounts[d]), backgroundColor: '#10b981', borderRadius: 4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // --- Carta 4: Kumpulan Umur ---
+            const ageGroups = { '0-14':0, '15-24':0, '25-34':0, '35-44':0, '45-54':0, '55-64':0, '65+':0 };
+            tbData.forEach(d => {
+                if(d.umur <= 14) ageGroups['0-14']++;
+                else if(d.umur <= 24) ageGroups['15-24']++;
+                else if(d.umur <= 34) ageGroups['25-34']++;
+                else if(d.umur <= 44) ageGroups['35-44']++;
+                else if(d.umur <= 54) ageGroups['45-54']++;
+                else if(d.umur <= 64) ageGroups['55-64']++;
+                else ageGroups['65+']++;
+            });
+
+            if(chartInstances.age) chartInstances.age.destroy();
+            chartInstances.age = new Chart(document.getElementById('ageChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ageGroups),
+                    datasets: [{ label: 'Bilangan Kes', data: Object.values(ageGroups), backgroundColor: '#f59e0b', borderRadius: 4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // 8. Masukkan Data ke dalam Jadual
+            const tableBody = document.getElementById('patientTableBody');
+            tableBody.innerHTML = ''; 
+            
+            // Ambil 15 rekod terakhir
+            const recentData = tbData.slice(-15).reverse(); 
+
+            recentData.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 hover:bg-gray-100';
+                
+                const genderBadge = row.jantina === 'Lelaki' 
+                    ? `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Lelaki</span>`
+                    : `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-pink-100 text-pink-800">Perempuan</span>`;
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${row.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${genderBadge}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.umur}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.daerah}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-semibold">ME ${row.minggu_epid}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // 9. Fungsi Muat Turun Data CSV yang telah diekstrak
+        window.downloadCSV = function() {
+            if(!window.tbData || window.tbData.length === 0) return;
+            
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "ID Daftar,Jantina,Umur,Daerah,Minggu Epid\n"; 
+            
+            window.tbData.forEach(function(row) {
+                let rowStr = `"${row.id}","${row.jantina}",${row.umur},"${row.daerah}",${row.minggu_epid}`;
+                csvContent += rowStr + "\r\n";
+            });
+
+            var encodedUri = encodeURI(csvContent);
+            var link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Data_TB_Ekstrak.csv");
+            document.body.appendChild(link); 
+            link.click();
+            document.body.removeChild(link); 
+        }
+    </script>
+</body>
+</html>
